@@ -42,6 +42,37 @@
   input[type="text"]{padding:10px;border-radius:10px;border:1px solid #eee;flex:1}
 
   footer{margin-top:12px;color:var(--muted);font-size:0.9rem}
+
+  #loadingOverlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.45);
+  backdrop-filter: blur(3px);
+  display: none;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  z-index: 99999;
+  color: #fff;
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.loader {
+  width: 48px;
+  height: 48px;
+  border: 5px solid rgba(255,255,255,0.3);
+  border-top-color: #ffffff;
+  border-radius: 50%;
+  animation: spin 0.9s linear infinite;
+  margin-bottom: 12px;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+  
 </style>
 </head>
 <body>
@@ -92,6 +123,12 @@
         <hr style="border:none;border-top:1px solid #f2f3fb;margin:12px 0" />
       </aside>
     </div>
+
+    <div id="loadingOverlay">
+      <div class="loader"></div>
+      <p>Validating pass…</p>
+    </div>  
+
 
     <div id="validModal" class="modal" role="dialog" aria-modal="true" aria-labelledby="validTitle">
       <div class="box">
@@ -173,6 +210,15 @@ function showValidModal(code){
   };
 }
 
+  function showLoader() {
+  document.getElementById("loadingOverlay").style.display = "flex";
+}
+
+function hideLoader() {
+  document.getElementById("loadingOverlay").style.display = "none";
+}
+
+
 function showInvalidModal(msg){
   invalidTxt.textContent = msg;
   invalidModal.classList.add('show');
@@ -230,7 +276,9 @@ function decodeFrame(){
       lastScanned = val;
       stopScanner(); // pause camera while validating
       setStatus('Validating pass...');
+      showLoader();
       verifyId(val).then(result => {
+        hideLoader();
         if(result === true){
           setStatus('Pass validated');
           showValidModal(val);
@@ -242,6 +290,7 @@ function decodeFrame(){
           showInvalidModal('Validation could not be completed due to network error. Retry or enter manually.');
         }
       }).catch(err=>{
+        hideLoader();
         console.error('verify catch', err);
         setStatus('Validation failed', true);
         showInvalidModal('Validation could not be completed. Retry or enter manually.');
@@ -323,7 +372,9 @@ manualGo.addEventListener('click', () => {
   const v = manualInput.value.trim();
   if(!v){ setStatus('Please paste the pass code', true); return; }
   setStatus('Validating manual code...');
+  showLoader();
   verifyId(v).then(ok=>{
+     hideLoader();
     if(ok === true) window.location.href = GOOGLE_FORM_PREFILL_URL + encodeURIComponent(v);
     else if(ok === false) showInvalidModal('Manual code is not recognized.');
     else showInvalidModal('Network error during validation.');
