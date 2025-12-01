@@ -1,150 +1,172 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>QR Scanner → Google Form</title>
-  <script src="https://unpkg.com/html5-qrcode@2.3.8/minified/html5-qrcode.min.js"></script>
-  <style>
-    body { font-family: system-ui, -apple-system, "Segoe UI", Roboto, Arial; padding: 18px; max-width: 720px; margin: auto; color:#111; }
-    h1 { font-size: 1.25rem; margin-bottom: 6px; }
-    p.lead { margin-top:0; color:#444; font-size:0.95rem; }
-    #reader { width:100%; max-width:420px; margin: 12px auto; }
-    #controls { display:flex; gap:8px; flex-wrap:wrap; margin-top:10px; }
-    button { padding:8px 12px; border-radius:8px; border:1px solid #ccc; background:white; cursor:pointer; }
-    button.primary { background:#0b6cff; color:white; border-color:#0b6cff; }
-    #result { margin-top:12px; font-weight:600; }
-    #manual { margin-top:12px; display:flex; gap:8px; flex-wrap:wrap; }
-    input[type="text"]{ padding:8px; border-radius:8px; border:1px solid #ccc; flex:1; min-width: 160px; }
-    footer { margin-top:20px; font-size:0.85rem; color:#666; }
-  </style>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>QR Scanner — Debug Mode</title>
+<script src="https://unpkg.com/html5-qrcode@2.3.8/minified/html5-qrcode.min.js"></script>
+<style>
+  body{font-family:system-ui,Segoe UI,Roboto,Arial;margin:18px;max-width:720px}
+  h1{margin-bottom:6px}
+  .status{padding:10px;border-radius:8px;background:#f3f6ff;color:#0b6cff;margin:8px 0}
+  .error{background:#fff1f0;color:#b00020;border:1px solid #f2c6c3}
+  #reader{width:100%;max-width:420px;margin:10px auto;border:1px dashed #ddd;padding:6px;border-radius:6px}
+  button{padding:8px 12px;border-radius:8px;margin-right:8px}
+  footer{font-size:0.85rem;color:#666;margin-top:16px}
+  pre{background:#111;color:#fff;padding:8px;border-radius:6px;overflow:auto;max-height:220px}
+</style>
 </head>
 <body>
-
-  <h1>Scan QR → Register</h1>
-  <p class="lead">Open this page on mobile, tap <strong>Start scanner</strong>, scan a code — you'll be redirected to the Google Form with the scanned code prefilled.</p>
-
+  <h1>QR Scanner — Debug</h1>
+  <div id="notice" class="status">Initializing…</div>
   <div id="reader"></div>
-
-  <div id="controls">
-    <button id="startBtn" class="primary">Start scanner</button>
+  <div style="margin-top:8px">
+    <button id="startBtn">Start scanner</button>
     <button id="stopBtn" style="display:none">Stop scanner</button>
-    <button id="switchCameraBtn" style="display:none">Switch camera</button>
+    <button id="switchBtn" style="display:none">Switch camera</button>
   </div>
 
-  <div id="result" aria-live="polite"></div>
+  <h3>Diagnostics</h3>
+  <div id="diag" class="status" style="background:#f8f9fa;color:#111"></div>
 
-  <div id="manual">
-    <input id="manualInput" type="text" placeholder="Or type/paste QR code value manually">
-    <button id="manualGo">Open Form</button>
-  </div>
+  <h4>Console log (client-side)</h4>
+  <pre id="log">—</pre>
 
   <footer>
-    <div>Hosted on GitHub Pages (static). Camera access only in your browser and stays local to the device.</div>
+    Tips: Use Chrome on Android for best results. If nothing happens, check site camera permission in browser settings.
   </footer>
 
 <script>
-// Google Form prefill base URL — with your field ID
 const GOOGLE_FORM_PREFILL_URL = "https://docs.google.com/forms/d/e/1FAIpQLScpuyjR36_M689jdxRBxgpSXa-J6UasLwsxJ-NTFfxzzYiBWg/viewform?usp=pp_url&entry.298461775=";
+const notice = document.getElementById('notice');
+const diag = document.getElementById('diag');
+const logEl = document.getElementById('log');
+const startBtn = document.getElementById('startBtn');
+const stopBtn = document.getElementById('stopBtn');
+const switchBtn = document.getElementById('switchBtn');
+let html5Scanner = null;
+let cams = [];
+let currentCamId = null;
 
-let html5QrcodeScanner = null;
-let currentCameraId = null;
-let cameras = [];
-
-const resultEl = document.getElementById("result");
-const readerEl = document.getElementById("reader");
-const startBtn = document.getElementById("startBtn");
-const stopBtn = document.getElementById("stopBtn");
-const switchCameraBtn = document.getElementById("switchCameraBtn");
-const manualInput = document.getElementById("manualInput");
-const manualGo = document.getElementById("manualGo");
-
-function showMessage(msg, isError=false) {
-  resultEl.textContent = msg;
-  resultEl.style.color = isError ? "#b00020" : "#0b6cff";
+function appendLog(txt){
+  console.log(txt);
+  const now = new Date().toLocaleTimeString();
+  logEl.textContent = (logEl.textContent === '—' ? '' : logEl.textContent + '\n') + `[${now}] ${txt}`;
+  logEl.scrollTop = logEl.scrollHeight;
 }
 
-function redirectToForm(val) {
-  const url = GOOGLE_FORM_PREFILL_URL + encodeURIComponent(val);
-  showMessage("Scanned: " + val + " — redirecting...");
-  setTimeout(() => window.location.href = url, 500);
+function setNotice(msg, isError=false){
+  notice.textContent = msg;
+  notice.className = 'status' + (isError ? ' error' : '');
 }
 
-function onScanSuccess(decodedText) {
-  if(html5QrcodeScanner) {
-    try { html5QrcodeScanner.clear(); } catch(e){}
+function setDiag(msg){ diag.textContent = msg; appendLog(msg); }
+
+// Feature detect
+function supportsGetUserMedia(){
+  return !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
+}
+
+async function listCameras(){
+  try{
+    appendLog('Requesting camera devices via Html5Qrcode.getCameras()...');
+    const devices = await Html5Qrcode.getCameras();
+    appendLog('getCameras returned: ' + JSON.stringify(devices || []));
+    cams = devices || [];
+    currentCamId = cams.length ? cams[0].id : null;
+    if(cams.length > 1) switchBtn.style.display = 'inline-block';
+    setDiag(`Cameras found: ${cams.length}`);
+  }catch(e){
+    appendLog('getCameras error: ' + (e && e.message ? e.message : e));
+    setDiag('Unable to enumerate cameras. Will try permission-based test.');
   }
-  redirectToForm(decodedText);
 }
 
-function onScanError(err) {
-  // silent
-}
-
-async function getCameras() {
-  try {
-    const devs = await Html5Qrcode.getCameras();
-    cameras = devs || [];
-    if(cameras.length > 0) currentCameraId = cameras[0].id;
-  } catch(e) {
-    cameras = [];
+async function start(cameraId){
+  if(!supportsGetUserMedia()){
+    setNotice('Camera not supported in this browser. Use Chrome on Android or Safari on iOS 11+.', true);
+    setDiag('navigator.mediaDevices.getUserMedia NOT supported');
+    return;
   }
-}
-
-async function startScanner(cameraId) {
-  if(!html5QrcodeScanner) {
-    html5QrcodeScanner = new Html5Qrcode("reader");
-  }
-  const config = { fps: 10, qrbox: { width: 250, height: 250 }};
-  try {
-    await html5QrcodeScanner.start(
+  setNotice('Starting camera… allow permission if prompted.');
+  if(!html5Scanner) html5Scanner = new Html5Qrcode("reader");
+  const config = { fps: 10, qrbox: 250 };
+  try{
+    await html5Scanner.start(
       cameraId ? { deviceId: { exact: cameraId } } : undefined,
       config,
-      onScanSuccess,
-      onScanError
+      (decoded)=> {
+        appendLog('Decoded: ' + decoded);
+        setNotice('Scanned: ' + decoded);
+        // redirect
+        setTimeout(()=> window.location.href = GOOGLE_FORM_PREFILL_URL + encodeURIComponent(decoded), 500);
+      },
+      err => {
+        // non-fatal scanning errors
+      }
     );
-    startBtn.style.display = "none";
-    stopBtn.style.display = "inline-block";
-    if(cameras.length > 1) switchCameraBtn.style.display = "inline-block";
-    showMessage("Scanning… point the camera at the QR code");
-  } catch(err) {
-    showMessage("Cannot start camera — check permissions.", true);
+    startBtn.style.display = 'none';
+    stopBtn.style.display = 'inline-block';
+    setDiag('Scanner started. Waiting for QR...');
+  }catch(err){
+    appendLog('Error starting scanner: ' + JSON.stringify(err));
+    setNotice('Failed to start camera — see diagnostics below.', true);
+    setDiag('start() failed: ' + (err && err.message ? err.message : JSON.stringify(err)));
   }
 }
 
-async function stopScanner() {
-  if(html5QrcodeScanner) {
-    try { await html5QrcodeScanner.stop(); await html5QrcodeScanner.clear(); } catch(e){}
+async function stop(){
+  if(html5Scanner){
+    try{ await html5Scanner.stop(); await html5Scanner.clear(); }catch(e){ appendLog('stop error: '+e); }
   }
-  startBtn.style.display = "inline-block";
-  stopBtn.style.display = "none";
-  switchCameraBtn.style.display = "none";
-  showMessage("");
+  startBtn.style.display = 'inline-block';
+  stopBtn.style.display = 'none';
+  setNotice('Scanner stopped.');
 }
 
-startBtn.addEventListener("click", async () => {
-  await getCameras();
-  await startScanner(currentCameraId);
+startBtn.addEventListener('click', async ()=>{
+  setNotice('Click acknowledged — requesting devices...');
+  appendLog('Start button clicked');
+  await listCameras();
+  // Quick permission test if no cameras were enumerated
+  if(!cams.length){
+    appendLog('No cameras enumerated; attempting a getUserMedia permission check');
+    try{
+      const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+      appendLog('permission test OK; stopping test stream');
+      stream.getTracks().forEach(t=>t.stop());
+      // try listing cameras again
+      await listCameras();
+    }catch(perr){
+      appendLog('Permission test failed: ' + perr);
+      setNotice('Camera permission denied or blocked. Please enable camera access for this site in browser settings.', true);
+      setDiag('Permission error: ' + (perr && perr.name ? perr.name : perr));
+      return;
+    }
+  }
+  await start(currentCamId);
 });
 
-stopBtn.addEventListener("click", async () => {
-  await stopScanner();
+stopBtn.addEventListener('click', stop);
+
+switchBtn.addEventListener('click', async ()=>{
+  if(cams.length < 2) return;
+  const idx = cams.findIndex(c => c.id === currentCamId);
+  currentCamId = cams[(idx + 1) % cams.length].id;
+  appendLog('Switching to camera: ' + currentCamId);
+  await stop();
+  await start(currentCamId);
 });
 
-switchCameraBtn.addEventListener("click", async () => {
-  if(cameras.length < 2) return;
-  const idx = cameras.findIndex(c => c.id === currentCameraId);
-  currentCameraId = cameras[(idx + 1) % cameras.length].id;
-  await stopScanner();
-  await startScanner(currentCameraId);
-});
-
-manualGo.addEventListener("click", () => {
-  const v = manualInput.value.trim();
-  if(!v) return showMessage("Paste or type QR value.", true);
-  redirectToForm(v);
-});
+// Initial checks
+appendLog('Page loaded. Performing feature checks...');
+if(!supportsGetUserMedia()){
+  setNotice('Browser does not support camera access (getUserMedia). Try Chrome on Android or Safari on iOS 11+.', true);
+  setDiag('getUserMedia unsupported');
+}else{
+  setNotice('Ready. Tap Start scanner and allow camera permission when prompted.');
+  setDiag('getUserMedia supported. Click Start to begin.');
+}
 </script>
-
 </body>
 </html>
