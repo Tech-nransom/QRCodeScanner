@@ -1,172 +1,241 @@
 <!doctype html>
 <html lang="en">
 <head>
-<meta charset="utf-8"/>
-<meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>QR Scanner — Debug Mode</title>
-<script src="https://unpkg.com/html5-qrcode@2.3.8/minified/html5-qrcode.min.js"></script>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>QR Scanner → Google Form</title>
 <style>
-  body{font-family:system-ui,Segoe UI,Roboto,Arial;margin:18px;max-width:720px}
-  h1{margin-bottom:6px}
-  .status{padding:10px;border-radius:8px;background:#f3f6ff;color:#0b6cff;margin:8px 0}
-  .error{background:#fff1f0;color:#b00020;border:1px solid #f2c6c3}
-  #reader{width:100%;max-width:420px;margin:10px auto;border:1px dashed #ddd;padding:6px;border-radius:6px}
-  button{padding:8px 12px;border-radius:8px;margin-right:8px}
-  footer{font-size:0.85rem;color:#666;margin-top:16px}
-  pre{background:#111;color:#fff;padding:8px;border-radius:6px;overflow:auto;max-height:220px}
+  :root{--accent:#6b46ff;--danger:#b00020;--muted:#666}
+  body{font-family:system-ui,Segoe UI,Roboto,Arial;margin:18px;max-width:820px;color:#111}
+  h1{font-size:1.25rem;margin-bottom:6px}
+  p.lead{color:#444;margin-top:0}
+  #videoWrap{display:flex;justify-content:center;margin-top:12px}
+  video{width:100%;max-width:420px;border-radius:10px;border:1px solid #e6e6e6;background:#000}
+  #controls{margin-top:12px;display:flex;gap:8px;flex-wrap:wrap}
+  button{padding:10px 14px;border-radius:10px;border:1px solid #ddd;background:#fff;cursor:pointer}
+  button.primary{background:var(--accent);color:#fff;border-color:var(--accent)}
+  button.secondary{background:#f6f8ff;color:var(--accent);border-color:#e6e8ff}
+  #message{margin-top:12px;font-weight:600}
+  #manual{margin-top:12px;display:flex;gap:8px}
+  input[type=text]{flex:1;padding:10px;border-radius:10px;border:1px solid #ddd}
+  footer{margin-top:18px;color:var(--muted);font-size:0.9rem}
+  .small{font-size:0.86rem;color:var(--muted)}
 </style>
 </head>
 <body>
-  <h1>QR Scanner — Debug</h1>
-  <div id="notice" class="status">Initializing…</div>
-  <div id="reader"></div>
-  <div style="margin-top:8px">
-    <button id="startBtn">Start scanner</button>
-    <button id="stopBtn" style="display:none">Stop scanner</button>
-    <button id="switchBtn" style="display:none">Switch camera</button>
+  <h1>Scan QR → Register</h1>
+  <p class="lead">Open on your phone, tap <strong>Start scanner</strong>, allow camera permission, point at the QR. The rear camera is used by default.</p>
+
+  <div id="videoWrap">
+    <video id="video" playsinline muted></video>
   </div>
 
-  <h3>Diagnostics</h3>
-  <div id="diag" class="status" style="background:#f8f9fa;color:#111"></div>
+  <div id="controls">
+    <button id="startBtn" class="primary">Start scanner</button>
+    <button id="stopBtn" style="display:none">Stop</button>
+    <button id="flipBtn" style="display:none">Flip camera</button>
+    <button id="torchBtn" style="display:none">Toggle torch</button>
+  </div>
 
-  <h4>Console log (client-side)</h4>
-  <pre id="log">—</pre>
+  <div id="message" class="small">Status: idle</div>
+
+  <div id="manual" style="margin-top:10px;">
+    <input id="manualInput" placeholder="Or paste QR code value manually">
+    <button id="manualGo" class="secondary">Open Form</button>
+  </div>
 
   <footer>
-    Tips: Use Chrome on Android for best results. If nothing happens, check site camera permission in browser settings.
+    Camera runs locally in your browser. No video is uploaded. If permission is blocked, enable camera in site settings.
   </footer>
 
+<!-- jsQR from jsdelivr -->
+<script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
+
 <script>
+/* === CONFIGURE THIS ===
+   Put your Google Form prefill base URL here. Keep the trailing = so scanned value is appended.
+   Example:
+   "https://docs.google.com/forms/d/e/FORM_ID/viewform?usp=pp_url&entry.123456789="
+*/
 const GOOGLE_FORM_PREFILL_URL = "https://docs.google.com/forms/d/e/1FAIpQLScpuyjR36_M689jdxRBxgpSXa-J6UasLwsxJ-NTFfxzzYiBWg/viewform?usp=pp_url&entry.298461775=";
-const notice = document.getElementById('notice');
-const diag = document.getElementById('diag');
-const logEl = document.getElementById('log');
+
+/* UI elements */
+const video = document.getElementById('video');
 const startBtn = document.getElementById('startBtn');
 const stopBtn = document.getElementById('stopBtn');
-const switchBtn = document.getElementById('switchBtn');
-let html5Scanner = null;
-let cams = [];
-let currentCamId = null;
+const flipBtn = document.getElementById('flipBtn');
+const torchBtn = document.getElementById('torchBtn');
+const message = document.getElementById('message');
+const manualInput = document.getElementById('manualInput');
+const manualGo = document.getElementById('manualGo');
 
-function appendLog(txt){
-  console.log(txt);
-  const now = new Date().toLocaleTimeString();
-  logEl.textContent = (logEl.textContent === '—' ? '' : logEl.textContent + '\n') + `[${now}] ${txt}`;
-  logEl.scrollTop = logEl.scrollHeight;
+let stream = null;
+let scanning = false;
+let scanInterval = null;
+let useFacingMode = 'environment'; // default to rear camera
+let currentVideoTrack = null;
+let torchOn = false;
+
+function setMessage(txt, isError=false){
+  message.textContent = 'Status: ' + txt;
+  message.style.color = isError ? 'var(--danger)' : 'var(--accent)';
 }
 
-function setNotice(msg, isError=false){
-  notice.textContent = msg;
-  notice.className = 'status' + (isError ? ' error' : '');
+/* Redirect to Google Form with encoded scanned value */
+function redirectToForm(value){
+  setMessage('Scanned: ' + value + ' — redirecting...');
+  const url = GOOGLE_FORM_PREFILL_URL + encodeURIComponent(value);
+  setTimeout(()=> window.location.href = url, 500);
 }
 
-function setDiag(msg){ diag.textContent = msg; appendLog(msg); }
-
-// Feature detect
-function supportsGetUserMedia(){
-  return !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
-}
-
-async function listCameras(){
-  try{
-    appendLog('Requesting camera devices via Html5Qrcode.getCameras()...');
-    const devices = await Html5Qrcode.getCameras();
-    appendLog('getCameras returned: ' + JSON.stringify(devices || []));
-    cams = devices || [];
-    currentCamId = cams.length ? cams[0].id : null;
-    if(cams.length > 1) switchBtn.style.display = 'inline-block';
-    setDiag(`Cameras found: ${cams.length}`);
-  }catch(e){
-    appendLog('getCameras error: ' + (e && e.message ? e.message : e));
-    setDiag('Unable to enumerate cameras. Will try permission-based test.');
-  }
-}
-
-async function start(cameraId){
-  if(!supportsGetUserMedia()){
-    setNotice('Camera not supported in this browser. Use Chrome on Android or Safari on iOS 11+.', true);
-    setDiag('navigator.mediaDevices.getUserMedia NOT supported');
-    return;
-  }
-  setNotice('Starting camera… allow permission if prompted.');
-  if(!html5Scanner) html5Scanner = new Html5Qrcode("reader");
-  const config = { fps: 10, qrbox: 250 };
-  try{
-    await html5Scanner.start(
-      cameraId ? { deviceId: { exact: cameraId } } : undefined,
-      config,
-      (decoded)=> {
-        appendLog('Decoded: ' + decoded);
-        setNotice('Scanned: ' + decoded);
-        // redirect
-        setTimeout(()=> window.location.href = GOOGLE_FORM_PREFILL_URL + encodeURIComponent(decoded), 500);
-      },
-      err => {
-        // non-fatal scanning errors
-      }
-    );
+/* Start camera with facing mode (environment/back by default) */
+async function startCamera(){
+  if(scanning) return;
+  setMessage('Requesting camera permission...');
+  const constraints = {
+    audio: false,
+    video: {
+      facingMode: { ideal: useFacingMode }, // prefer environment (rear)
+      width: { ideal: 1280 },
+      height: { ideal: 720 }
+    }
+  };
+  try {
+    stream = await navigator.mediaDevices.getUserMedia(constraints);
+    video.srcObject = stream;
+    await video.play();
+    scanning = true;
     startBtn.style.display = 'none';
     stopBtn.style.display = 'inline-block';
-    setDiag('Scanner started. Waiting for QR...');
-  }catch(err){
-    appendLog('Error starting scanner: ' + JSON.stringify(err));
-    setNotice('Failed to start camera — see diagnostics below.', true);
-    setDiag('start() failed: ' + (err && err.message ? err.message : JSON.stringify(err)));
-  }
-}
+    flipBtn.style.display = 'inline-block';
+    setMessage('Camera running — scanning for QR...');
+    currentVideoTrack = stream.getVideoTracks()[0];
 
-async function stop(){
-  if(html5Scanner){
-    try{ await html5Scanner.stop(); await html5Scanner.clear(); }catch(e){ appendLog('stop error: '+e); }
-  }
-  startBtn.style.display = 'inline-block';
-  stopBtn.style.display = 'none';
-  setNotice('Scanner stopped.');
-}
+    // show torch button if supported
+    const caps = currentVideoTrack.getCapabilities ? currentVideoTrack.getCapabilities() : {};
+    if(caps && caps.torch) {
+      torchBtn.style.display = 'inline-block';
+    } else {
+      torchBtn.style.display = 'none';
+    }
 
-startBtn.addEventListener('click', async ()=>{
-  setNotice('Click acknowledged — requesting devices...');
-  appendLog('Start button clicked');
-  await listCameras();
-  // Quick permission test if no cameras were enumerated
-  if(!cams.length){
-    appendLog('No cameras enumerated; attempting a getUserMedia permission check');
-    try{
-      const stream = await navigator.mediaDevices.getUserMedia({ video: true });
-      appendLog('permission test OK; stopping test stream');
-      stream.getTracks().forEach(t=>t.stop());
-      // try listing cameras again
-      await listCameras();
-    }catch(perr){
-      appendLog('Permission test failed: ' + perr);
-      setNotice('Camera permission denied or blocked. Please enable camera access for this site in browser settings.', true);
-      setDiag('Permission error: ' + (perr && perr.name ? perr.name : perr));
-      return;
+    startDecodeLoop();
+  } catch (err) {
+    console.error('camera start error', err);
+    const name = err && err.name ? err.name : err;
+    setMessage('Camera error: ' + name, true);
+    // helpful hints
+    if(name === 'NotAllowedError' || name === 'SecurityError'){
+      setMessage('Camera permission denied — enable site camera permission in browser settings', true);
+    } else if(name === 'NotFoundError' || name === 'OverconstrainedError'){
+      setMessage('No suitable camera found', true);
     }
   }
-  await start(currentCamId);
-});
-
-stopBtn.addEventListener('click', stop);
-
-switchBtn.addEventListener('click', async ()=>{
-  if(cams.length < 2) return;
-  const idx = cams.findIndex(c => c.id === currentCamId);
-  currentCamId = cams[(idx + 1) % cams.length].id;
-  appendLog('Switching to camera: ' + currentCamId);
-  await stop();
-  await start(currentCamId);
-});
-
-// Initial checks
-appendLog('Page loaded. Performing feature checks...');
-if(!supportsGetUserMedia()){
-  setNotice('Browser does not support camera access (getUserMedia). Try Chrome on Android or Safari on iOS 11+.', true);
-  setDiag('getUserMedia unsupported');
-}else{
-  setNotice('Ready. Tap Start scanner and allow camera permission when prompted.');
-  setDiag('getUserMedia supported. Click Start to begin.');
 }
+
+async function stopCamera(){
+  scanning = false;
+  if(scanInterval){ clearInterval(scanInterval); scanInterval = null; }
+  if(stream){
+    stream.getTracks().forEach(t => t.stop());
+    stream = null;
+  }
+  video.pause();
+  video.srcObject = null;
+  startBtn.style.display = 'inline-block';
+  stopBtn.style.display = 'none';
+  flipBtn.style.display = 'none';
+  torchBtn.style.display = 'none';
+  setMessage('stopped');
+}
+
+/* Flip camera between environment and user */
+async function flipCamera(){
+  useFacingMode = (useFacingMode === 'environment') ? 'user' : 'environment';
+  setMessage('Switching camera...');
+  await stopCamera();
+  await startCamera();
+}
+
+/* Toggle torch (if supported) */
+async function toggleTorch(){
+  if(!currentVideoTrack) return;
+  try {
+    const cap = currentVideoTrack.getCapabilities();
+    if(!cap.torch) {
+      setMessage('Torch not supported on this device', true);
+      return;
+    }
+    torchOn = !torchOn;
+    await currentVideoTrack.applyConstraints({ advanced: [{ torch: torchOn }] });
+    torchBtn.textContent = torchOn ? 'Torch ON' : 'Toggle torch';
+  } catch (e) {
+    console.warn('torch error', e);
+    setMessage('Torch toggle failed', true);
+  }
+}
+
+/* decode loop using jsQR: capture from video --> canvas --> jsQR */
+function startDecodeLoop(){
+  const canvas = document.createElement('canvas');
+  const ctx = canvas.getContext('2d');
+
+  scanInterval = setInterval(() => {
+    if(!video || video.readyState !== video.HAVE_ENOUGH_DATA) return;
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+    try {
+      const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      const code = jsQR(imageData.data, imageData.width, imageData.height, { inversionAttempts: "attemptBoth" });
+      if(code && code.data) {
+        // success
+        stopCamera();
+        redirectToForm(code.data);
+      }
+    } catch(err){
+      // ignore decoding errors
+      // console.warn('decode error', err);
+    }
+  }, 200); // scan every 200ms
+}
+
+/* manual paste open */
+manualGo.addEventListener('click', () => {
+  const v = manualInput.value.trim();
+  if(!v) return setMessage('Paste QR value and click Open Form', true);
+  redirectToForm(v);
+});
+
+/* UI controls */
+startBtn.addEventListener('click', async () => {
+  // feature detect
+  if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    setMessage('Camera API not supported in this browser. Use Chrome on Android or modern Safari.', true);
+    return;
+  }
+  await startCamera();
+});
+stopBtn.addEventListener('click', stopCamera);
+flipBtn.addEventListener('click', flipCamera);
+torchBtn.addEventListener('click', toggleTorch);
+
+/* initial state message */
+if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+  setMessage('Camera API not supported. Use Chrome (Android) or Safari (iOS).', true);
+} else {
+  setMessage('idle — Ready. Tap Start scanner. Rear camera is preferred by default.');
+}
+
+/* convenience: attempt to pre-enumerate cameras (optional; not required) */
+(async function tryEnumerate(){
+  if(!navigator.mediaDevices || !navigator.mediaDevices.enumerateDevices) return;
+  try {
+    const devices = await navigator.mediaDevices.enumerateDevices();
+    // won't reveal labels unless permission granted; used only for basic heuristics
+    // console.log('devices', devices);
+  } catch(e){}
+})();
 </script>
 </body>
 </html>
