@@ -90,12 +90,6 @@
         <div class="kv"><div class="chip">Privacy</div><div class="small">We do not upload camera streams. Collected data goes to Google Forms.</div></div>
 
         <hr style="border:none;border-top:1px solid #f2f3fb;margin:12px 0" />
-
-        <h4 style="margin:8px 0">Admin notes</h4>
-        <ul style="color:var(--muted);margin:8px 0 0 18px">
-          <li>Whitelist is maintained in a Google Sheet (editable by admins).</li>
-          <li>Apps Script endpoint verifies scanned codes. Keep endpoint URL private to admins if needed.</li>
-        </ul>
       </aside>
     </div>
 
@@ -120,9 +114,6 @@
         </div>
       </div>
     </div>
-
-    <footer style="margin-top:14px" class="small">Deploy: commit this file to repo root and enable GitHub Pages. Test on Chrome (Android) and Safari (iOS).</footer>
-
   </div>
 
 <!-- jsQR -->
@@ -131,7 +122,7 @@
 <script>
 /* ============ CONFIG ============ */
 const GOOGLE_FORM_PREFILL_URL = "https://docs.google.com/forms/d/e/1FAIpQLScpuyjR36_M689jdxRBxgpSXa-J6UasLwsxJ-NTFfxzzYiBWg/viewform?usp=pp_url&entry.298461775=";
-const VERIFY_URL = "https://script.google.com/macros/s/AKfycbym5NnNK4CVHXItzqaWRUYwIwsWizaH3MOrth1KrCcSk67pjaJJJVegPIISvyHezucnOA/exec";
+const VERIFY_URL = "https://script.google.com/macros/s/AKfycbxfjs_u2xG9o1s5azNPMT49GqlywXn810gY4AyCqLWPQaI5PBNVqwtvBwgsgRtnHSDwaA/exec";
 /* ================================= */
 
 const video = document.getElementById('video');
