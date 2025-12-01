@@ -3,104 +3,270 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>QR Scanner → Google Form</title>
+<title>Pass Scan — Validate & Register</title>
 <style>
-  :root{--accent:#6b46ff;--danger:#b00020;--muted:#666}
-  body{font-family:system-ui,Segoe UI,Roboto,Arial;margin:18px;max-width:820px;color:#111}
-  h1{font-size:1.25rem;margin-bottom:6px}
-  p.lead{color:#444;margin-top:0}
-  #videoWrap{display:flex;justify-content:center;margin-top:12px}
-  video{width:100%;max-width:420px;border-radius:10px;border:1px solid #e6e6e6;background:#000}
-  #controls{margin-top:12px;display:flex;gap:8px;flex-wrap:wrap}
-  button{padding:10px 14px;border-radius:10px;border:1px solid #ddd;background:#fff;cursor:pointer}
-  button.primary{background:var(--accent);color:#fff;border-color:var(--accent)}
-  button.secondary{background:#f6f8ff;color:var(--accent);border-color:#e6e8ff}
-  #message{margin-top:12px;font-weight:600}
-  #manual{margin-top:12px;display:flex;gap:8px}
-  input[type=text]{flex:1;padding:10px;border-radius:10px;border:1px solid #ddd}
-  footer{margin-top:18px;color:var(--muted);font-size:0.9rem}
-  .small{font-size:0.86rem;color:var(--muted)}
+  :root{--accent:#0b6cff;--muted:#6b7280;--card:#fff;--danger:#d9534f}
+  *{box-sizing:border-box}
+  body{margin:0;font-family:Inter,system-ui,Segoe UI,Roboto,Arial;background:linear-gradient(180deg,#f7f8ff,#fff);color:#071127;padding:20px;display:flex;justify-content:center}
+  .wrap{width:100%;max-width:920px}
+  .card{background:var(--card);border-radius:12px;padding:18px;box-shadow:0 8px 30px rgba(12,20,40,0.06);display:grid;grid-template-columns:380px 1fr;gap:18px}
+  @media(max-width:880px){.card{grid-template-columns:1fr}}
+  header{display:flex;gap:12px;align-items:center}
+  .logo{width:56px;height:56px;border-radius:10px;background:linear-gradient(135deg,#6b46ff,#4c33cc);display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700}
+  h1{margin:0;font-size:1.05rem}
+  .subtitle{margin:0;color:var(--muted);font-size:0.9rem}
+
+  .videoWrap{position:relative;border-radius:10px;overflow:hidden;background:#000;display:flex;align-items:center;justify-content:center;height:320px}
+  video{width:100%;height:100%;object-fit:cover;display:block}
+  .overlay{position:absolute;inset:12px;display:flex;align-items:center;justify-content:center;pointer-events:none}
+  .scanBox{width:64%;max-width:260px;aspect-ratio:1;border-radius:12px;border:2px dashed rgba(255,255,255,0.18);display:flex;align-items:center;justify-content:center;color:rgba(255,255,255,0.85);font-weight:700;backdrop-filter:blur(4px)}
+  .pulse{position:absolute;width:calc(64% + 28px);height:calc(64% + 28px);border-radius:16px;opacity:0.12;background:radial-gradient(circle,#6b46ff,transparent);animation:pulse 2s infinite}
+  @keyframes pulse{0%{transform:scale(.98)}50%{transform:scale(1.03)}100%{transform:scale(.98)}}
+
+  .controls{display:flex;gap:8px;align-items:center;margin-top:12px;flex-wrap:wrap}
+  .btn{padding:10px 14px;border-radius:10px;border:0;cursor:pointer;font-weight:600;background:#fff;box-shadow:0 6px 18px rgba(12,20,40,0.06)}
+  .btn.primary{background:var(--accent);color:#fff}
+  .btn.ghost{background:transparent;border:1px solid #eef2ff;color:var(--accent)}
+
+  .small{font-size:0.88rem;color:var(--muted)}
+
+  aside.panel{padding:12px;border-radius:10px;background:linear-gradient(180deg,rgba(255,255,255,0.7),rgba(255,255,255,0.6))}
+  .kv{display:flex;align-items:center;gap:8px;margin:8px 0}
+  .chip{background:#fff;padding:6px 10px;border-radius:999px;border:1px solid #f0efff;color:var(--accent);font-weight:700}
+
+  .modal{position:fixed;inset:0;display:none;align-items:center;justify-content:center;background:linear-gradient(180deg,rgba(2,6,23,0.28),rgba(2,6,23,0.5));z-index:9999}
+  .modal.show{display:flex}
+  .modal .box{background:#fff;padding:20px;border-radius:12px;max-width:460px;width:92%;text-align:center}
+  .invalid{color:var(--danger);font-weight:700}
+
+  input[type="text"]{padding:10px;border-radius:10px;border:1px solid #eee;flex:1}
+
+  footer{margin-top:12px;color:var(--muted);font-size:0.9rem}
 </style>
 </head>
 <body>
-  <h1>Scan QR → Register</h1>
-  <p class="lead">Open on your phone, tap <strong>Start scanner</strong>, allow camera permission, point at the QR. The rear camera is used by default.</p>
+  <div class="wrap">
+    <div class="card" role="application" aria-label="Pass scanner and validator">
 
-  <div id="videoWrap">
-    <video id="video" playsinline muted></video>
+      <div>
+        <header>
+          <div class="logo">BK</div>
+          <div>
+            <h1>BK Shivani — Pass Scan</h1>
+            <p class="subtitle small">Scan the physical pass QR. The app will validate the pass before opening the registration form.</p>
+          </div>
+        </header>
+
+        <div class="videoWrap" style="margin-top:12px">
+          <video id="video" playsinline muted aria-label="camera preview"></video>
+          <div class="overlay" aria-hidden="true">
+            <div class="pulse"></div>
+            <div class="scanBox">Align QR here</div>
+          </div>
+        </div>
+
+        <div class="controls">
+          <button id="startBtn" class="btn primary">Start scanner</button>
+          <button id="stopBtn" class="btn" style="display:none">Stop</button>
+          <button id="flipBtn" class="btn" style="display:none">Flip camera</button>
+          <button id="torchBtn" class="btn" style="display:none">Torch</button>
+          <div style="flex:1"></div>
+          <div id="status" class="small">Status: idle</div>
+        </div>
+
+        <div style="display:flex;gap:8px;margin-top:12px">
+          <input id="manualInput" type="text" placeholder="Paste pass code manually" />
+          <button id="manualGo" class="btn">Open Form</button>
+        </div>
+
+        <p class="small" style="margin-top:12px">Camera runs locally in the browser; no video is uploaded. If camera is blocked, enable permission in your browser settings.</p>
+      </div>
+
+      <aside class="panel" aria-hidden="false">
+        <h3>How it works</h3>
+        <p class="small">Scan the code printed on the pass. The app validates the code with the admin list and then opens the registration form with the pass number pre-filled.</p>
+
+        <div class="kv"><div class="chip">Validated</div><div class="small">Each QR is checked against the admin list.</div></div>
+        <div class="kv"><div class="chip">Privacy</div><div class="small">We do not upload camera streams. Collected data goes to Google Forms.</div></div>
+
+        <hr style="border:none;border-top:1px solid #f2f3fb;margin:12px 0" />
+
+        <h4 style="margin:8px 0">Admin notes</h4>
+        <ul style="color:var(--muted);margin:8px 0 0 18px">
+          <li>Whitelist is maintained in a Google Sheet (editable by admins).</li>
+          <li>Apps Script endpoint verifies scanned codes. Keep endpoint URL private to admins if needed.</li>
+        </ul>
+      </aside>
+    </div>
+
+    <div id="validModal" class="modal" role="dialog" aria-modal="true" aria-labelledby="validTitle">
+      <div class="box">
+        <h3 id="validTitle">Pass validated</h3>
+        <p id="validTxt" class="small" style="margin-top:8px"></p>
+        <div style="margin-top:14px;display:flex;gap:10px;justify-content:center">
+          <button id="openFormBtn" class="btn primary">Open Form</button>
+          <button id="scanAgainBtn" class="btn">Scan another</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="invalidModal" class="modal" role="dialog" aria-modal="true" aria-labelledby="invalidTitle">
+      <div class="box">
+        <h3 id="invalidTitle" class="invalid">Invalid pass</h3>
+        <p id="invalidTxt" class="small" style="margin-top:8px"></p>
+        <div style="margin-top:14px;display:flex;gap:10px;justify-content:center">
+          <button id="retryBtn" class="btn">Retry</button>
+          <button id="manualBtn" class="btn ghost">Enter Manually</button>
+        </div>
+      </div>
+    </div>
+
+    <footer style="margin-top:14px" class="small">Deploy: commit this file to repo root and enable GitHub Pages. Test on Chrome (Android) and Safari (iOS).</footer>
+
   </div>
 
-  <div id="controls">
-    <button id="startBtn" class="primary">Start scanner</button>
-    <button id="stopBtn" style="display:none">Stop</button>
-    <button id="flipBtn" style="display:none">Flip camera</button>
-    <button id="torchBtn" style="display:none">Toggle torch</button>
-  </div>
-
-  <div id="message" class="small">Status: idle</div>
-
-  <div id="manual" style="margin-top:10px;">
-    <input id="manualInput" placeholder="Or paste QR code value manually">
-    <button id="manualGo" class="secondary">Open Form</button>
-  </div>
-
-  <footer>
-    Camera runs locally in your browser. No video is uploaded. If permission is blocked, enable camera in site settings.
-  </footer>
-
-<!-- jsQR from jsdelivr -->
+<!-- jsQR -->
 <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
 
 <script>
-/* === CONFIGURE THIS ===
-   Put your Google Form prefill base URL here. Keep the trailing = so scanned value is appended.
-   Example:
-   "https://docs.google.com/forms/d/e/FORM_ID/viewform?usp=pp_url&entry.123456789="
-*/
+/* ============ CONFIG ============ */
 const GOOGLE_FORM_PREFILL_URL = "https://docs.google.com/forms/d/e/1FAIpQLScpuyjR36_M689jdxRBxgpSXa-J6UasLwsxJ-NTFfxzzYiBWg/viewform?usp=pp_url&entry.298461775=";
+const VERIFY_URL = "https://script.google.com/macros/s/AKfycbym5NnNK4CVHXItzqaWRUYwIwsWizaH3MOrth1KrCcSk67pjaJJJVegPIISvyHezucnOA/exec";
+/* ================================= */
 
-/* UI elements */
 const video = document.getElementById('video');
 const startBtn = document.getElementById('startBtn');
 const stopBtn = document.getElementById('stopBtn');
 const flipBtn = document.getElementById('flipBtn');
 const torchBtn = document.getElementById('torchBtn');
-const message = document.getElementById('message');
+const status = document.getElementById('status');
 const manualInput = document.getElementById('manualInput');
 const manualGo = document.getElementById('manualGo');
 
+const validModal = document.getElementById('validModal');
+const validTxt = document.getElementById('validTxt');
+const openFormBtn = document.getElementById('openFormBtn');
+const scanAgainBtn = document.getElementById('scanAgainBtn');
+
+const invalidModal = document.getElementById('invalidModal');
+const invalidTxt = document.getElementById('invalidTxt');
+const retryBtn = document.getElementById('retryBtn');
+const manualBtn = document.getElementById('manualBtn');
+
 let stream = null;
 let scanning = false;
-let scanInterval = null;
-let useFacingMode = 'environment'; // default to rear camera
-let currentVideoTrack = null;
-let torchOn = false;
+let decodeInterval = null;
+let useFacing = 'environment';
+let currentTrack = null;
+let lastScanned = null;
 
-function setMessage(txt, isError=false){
-  message.textContent = 'Status: ' + txt;
-  message.style.color = isError ? 'var(--danger)' : 'var(--accent)';
+/* small in-memory cache for verified ids to reduce calls */
+const verifyCache = new Map(); // id -> {valid:true, ts: epoch}
+
+/* helpers */
+function setStatus(txt, isError=false){
+  status.textContent = 'Status: ' + txt;
+  status.style.color = isError ? 'var(--danger)' : 'var(--accent)';
 }
 
-/* Redirect to Google Form with encoded scanned value */
-function redirectToForm(value){
-  setMessage('Scanned: ' + value + ' — redirecting...');
-  const url = GOOGLE_FORM_PREFILL_URL + encodeURIComponent(value);
-  setTimeout(()=> window.location.href = url, 500);
-}
-
-/* Start camera with facing mode (environment/back by default) */
-async function startCamera(){
-  if(scanning) return;
-  setMessage('Requesting camera permission...');
-  const constraints = {
-    audio: false,
-    video: {
-      facingMode: { ideal: useFacingMode }, // prefer environment (rear)
-      width: { ideal: 1280 },
-      height: { ideal: 720 }
-    }
+function showValidModal(code){
+  validTxt.textContent = code;
+  validModal.classList.add('show');
+  openFormBtn.onclick = () => {
+    window.location.href = GOOGLE_FORM_PREFILL_URL + encodeURIComponent(code);
   };
+  scanAgainBtn.onclick = () => {
+    validModal.classList.remove('show');
+    lastScanned = null;
+    startScanner();
+  };
+}
+
+function showInvalidModal(msg){
+  invalidTxt.textContent = msg;
+  invalidModal.classList.add('show');
+  retryBtn.onclick = () => {
+    invalidModal.classList.remove('show');
+    lastScanned = null;
+    startScanner();
+  };
+  manualBtn.onclick = () => {
+    invalidModal.classList.remove('show');
+    manualInput.focus();
+  };
+}
+
+/* verify via Apps Script endpoint */
+async function verifyId(id){
+  // check cache first (cache for 5 minutes)
+  const cached = verifyCache.get(id);
+  const now = Date.now();
+  if(cached && (now - cached.ts) < 5 * 60 * 1000) return cached.valid;
+
   try {
+    const resp = await fetch(VERIFY_URL + '?id=' + encodeURIComponent(id), {cache: 'no-store'});
+    if(!resp.ok) {
+      console.warn('verify: non-200', resp.status);
+      return null;
+    }
+    const j = await resp.json();
+    const valid = !!j.valid;
+    verifyCache.set(id, {valid, ts: now});
+    return valid;
+  } catch (e){
+    console.error('verify error', e);
+    return null; // network or other error
+  }
+}
+
+/* frame decoding loop using jsQR */
+function decodeFrame(){
+  if(!video || video.readyState !== video.HAVE_ENOUGH_DATA) return;
+  const w = video.videoWidth, h = video.videoHeight;
+  if(!w || !h) return;
+  const canvas = decodeFrame._canvas || (decodeFrame._canvas = document.createElement('canvas'));
+  canvas.width = w; canvas.height = h;
+  const ctx = canvas.getContext('2d');
+  ctx.drawImage(video, 0, 0, w, h);
+  try {
+    const imageData = ctx.getImageData(0,0,w,h);
+    const code = jsQR(imageData.data, imageData.width, imageData.height, { inversionAttempts: "attemptBoth" });
+    if(code && code.data){
+      const val = String(code.data).trim();
+      if(!val) return;
+      // debounce same code
+      if(lastScanned && lastScanned === val) return;
+      lastScanned = val;
+      stopScanner(); // pause camera while validating
+      setStatus('Validating pass...');
+      verifyId(val).then(result => {
+        if(result === true){
+          setStatus('Pass validated');
+          showValidModal(val);
+        } else if(result === false){
+          setStatus('Pass invalid', true);
+          showInvalidModal('This pass code is not recognized or has been revoked.');
+        } else { // null = network/unknown
+          setStatus('Validation failed (network). Try again.', true);
+          showInvalidModal('Validation could not be completed due to network error. Retry or enter manually.');
+        }
+      }).catch(err=>{
+        console.error('verify catch', err);
+        setStatus('Validation failed', true);
+        showInvalidModal('Validation could not be completed. Retry or enter manually.');
+      });
+    }
+  } catch(e){
+    // ignore decoding exceptions
+  }
+}
+
+/* start / stop camera */
+async function startScanner(){
+  if(scanning) return;
+  setStatus('Requesting camera...');
+  try {
+    const constraints = { video: { facingMode: { ideal: useFacing }, width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false };
     stream = await navigator.mediaDevices.getUserMedia(constraints);
     video.srcObject = stream;
     await video.play();
@@ -108,134 +274,92 @@ async function startCamera(){
     startBtn.style.display = 'none';
     stopBtn.style.display = 'inline-block';
     flipBtn.style.display = 'inline-block';
-    setMessage('Camera running — scanning for QR...');
-    currentVideoTrack = stream.getVideoTracks()[0];
+    setStatus('Camera live — scanning...');
+    currentTrack = stream.getVideoTracks()[0];
 
-    // show torch button if supported
-    const caps = currentVideoTrack.getCapabilities ? currentVideoTrack.getCapabilities() : {};
-    if(caps && caps.torch) {
-      torchBtn.style.display = 'inline-block';
-    } else {
-      torchBtn.style.display = 'none';
-    }
+    // show torch if supported
+    try {
+      const caps = currentTrack.getCapabilities ? currentTrack.getCapabilities() : {};
+      if(caps && caps.torch) torchBtn.style.display = 'inline-block';
+      else torchBtn.style.display = 'none';
+    } catch(e){ torchBtn.style.display = 'none' }
 
-    startDecodeLoop();
+    decodeInterval = setInterval(decodeFrame, 180);
   } catch (err) {
-    console.error('camera start error', err);
+    console.error('startScanner error', err);
     const name = err && err.name ? err.name : err;
-    setMessage('Camera error: ' + name, true);
-    // helpful hints
-    if(name === 'NotAllowedError' || name === 'SecurityError'){
-      setMessage('Camera permission denied — enable site camera permission in browser settings', true);
-    } else if(name === 'NotFoundError' || name === 'OverconstrainedError'){
-      setMessage('No suitable camera found', true);
-    }
+    setStatus('Camera error: ' + name, true);
   }
 }
 
-async function stopCamera(){
+function stopScanner(){
   scanning = false;
-  if(scanInterval){ clearInterval(scanInterval); scanInterval = null; }
-  if(stream){
-    stream.getTracks().forEach(t => t.stop());
-    stream = null;
-  }
+  if(decodeInterval){ clearInterval(decodeInterval); decodeInterval = null; }
+  if(stream){ stream.getTracks().forEach(t=>t.stop()); stream = null; }
   video.pause();
   video.srcObject = null;
   startBtn.style.display = 'inline-block';
   stopBtn.style.display = 'none';
   flipBtn.style.display = 'none';
   torchBtn.style.display = 'none';
-  setMessage('stopped');
+  setStatus('stopped');
 }
 
-/* Flip camera between environment and user */
 async function flipCamera(){
-  useFacingMode = (useFacingMode === 'environment') ? 'user' : 'environment';
-  setMessage('Switching camera...');
-  await stopCamera();
-  await startCamera();
+  useFacing = (useFacing === 'environment') ? 'user' : 'environment';
+  setStatus('Switching camera...');
+  stopScanner();
+  setTimeout(()=>startScanner(), 250);
 }
 
-/* Toggle torch (if supported) */
 async function toggleTorch(){
-  if(!currentVideoTrack) return;
+  if(!currentTrack) return;
   try {
-    const cap = currentVideoTrack.getCapabilities();
-    if(!cap.torch) {
-      setMessage('Torch not supported on this device', true);
-      return;
-    }
-    torchOn = !torchOn;
-    await currentVideoTrack.applyConstraints({ advanced: [{ torch: torchOn }] });
-    torchBtn.textContent = torchOn ? 'Torch ON' : 'Toggle torch';
-  } catch (e) {
-    console.warn('torch error', e);
-    setMessage('Torch toggle failed', true);
+    const caps = currentTrack.getCapabilities ? currentTrack.getCapabilities() : {};
+    if(!caps || !caps.torch) { setStatus('Torch not supported', true); return; }
+    const settings = currentTrack.getSettings ? currentTrack.getSettings() : {};
+    const newTorch = !(settings.torch || false);
+    await currentTrack.applyConstraints({ advanced: [{ torch: newTorch }] });
+    torchBtn.textContent = newTorch ? 'Torch ON' : 'Torch';
+  } catch(e){
+    console.warn('torch err', e);
+    setStatus('Torch failed', true);
   }
 }
 
-/* decode loop using jsQR: capture from video --> canvas --> jsQR */
-function startDecodeLoop(){
-  const canvas = document.createElement('canvas');
-  const ctx = canvas.getContext('2d');
-
-  scanInterval = setInterval(() => {
-    if(!video || video.readyState !== video.HAVE_ENOUGH_DATA) return;
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
-    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-    try {
-      const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-      const code = jsQR(imageData.data, imageData.width, imageData.height, { inversionAttempts: "attemptBoth" });
-      if(code && code.data) {
-        // success
-        stopCamera();
-        redirectToForm(code.data);
-      }
-    } catch(err){
-      // ignore decoding errors
-      // console.warn('decode error', err);
-    }
-  }, 200); // scan every 200ms
-}
-
-/* manual paste open */
+/* manual open */
 manualGo.addEventListener('click', () => {
   const v = manualInput.value.trim();
-  if(!v) return setMessage('Paste QR value and click Open Form', true);
-  redirectToForm(v);
+  if(!v){ setStatus('Please paste the pass code', true); return; }
+  setStatus('Validating manual code...');
+  verifyId(v).then(ok=>{
+    if(ok === true) window.location.href = GOOGLE_FORM_PREFILL_URL + encodeURIComponent(v);
+    else if(ok === false) showInvalidModal('Manual code is not recognized.');
+    else showInvalidModal('Network error during validation.');
+  });
 });
 
-/* UI controls */
-startBtn.addEventListener('click', async () => {
-  // feature detect
-  if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-    setMessage('Camera API not supported in this browser. Use Chrome on Android or modern Safari.', true);
-    return;
-  }
-  await startCamera();
-});
-stopBtn.addEventListener('click', stopCamera);
+/* UI wiring */
+startBtn.addEventListener('click', startScanner);
+stopBtn.addEventListener('click', stopScanner);
 flipBtn.addEventListener('click', flipCamera);
 torchBtn.addEventListener('click', toggleTorch);
+retryBtn.addEventListener('click', () => { invalidModal.classList.remove('show'); lastScanned = null; startScanner(); });
+manualBtn.addEventListener('click', () => { invalidModal.classList.remove('show'); manualInput.focus(); });
+openFormBtn.addEventListener('click', () => validModal.classList.remove('show'));
+scanAgainBtn.addEventListener('click', () => { validModal.classList.remove('show'); lastScanned = null; startScanner(); });
 
-/* initial state message */
-if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-  setMessage('Camera API not supported. Use Chrome (Android) or Safari (iOS).', true);
+/* init */
+if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
+  setStatus('Camera not supported by this browser. Use Chrome (Android) or modern Safari (iOS).', true);
 } else {
-  setMessage('idle — Ready. Tap Start scanner. Rear camera is preferred by default.');
+  setStatus('idle — Tap Start scanner. Rear camera is preferred.');
 }
 
-/* convenience: attempt to pre-enumerate cameras (optional; not required) */
-(async function tryEnumerate(){
-  if(!navigator.mediaDevices || !navigator.mediaDevices.enumerateDevices) return;
-  try {
-    const devices = await navigator.mediaDevices.enumerateDevices();
-    // won't reveal labels unless permission granted; used only for basic heuristics
-    // console.log('devices', devices);
-  } catch(e){}
-})();
+/* close modals with escape */
+document.addEventListener('keydown', e => {
+  if(e.key === 'Escape') { validModal.classList.remove('show'); invalidModal.classList.remove('show'); }
+});
 </script>
 </body>
 </html>
