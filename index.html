@@ -141,7 +141,7 @@
     <script>
       // ---------- CONFIG ----------
       // Replace this with your Apps Script 'exec' URL (web app) that implements doPost/doOptions
-      const APPS_SCRIPT_EXEC_URL = "https://script.google.com/macros/s/AKfycbwWSikNf04D-FFOh38y9kdR6wQZaOVC45vt9D2VmNSfMGVv9cetOnK66PWYc1EZBEgSgA/exec";
+      const APPS_SCRIPT_EXEC_URL = "https://script.google.com/macros/s/AKfycbwnIZMx_vwhd9qAQSCvCgswi415b3M56tNA8yCBN4rCVFzg-4QNSAImetbcdoRPAvgAQw/exec";
       // ----------------------------
 
       // helpers / elements
@@ -328,7 +328,7 @@
 
         // Otherwise POST to your Apps Script doPost endpoint (recommended static flow)
         try {
-          const resp = await fetch("https://script.google.com/macros/s/AKfycbwWSikNf04D-FFOh38y9kdR6wQZaOVC45vt9D2VmNSfMGVv9cetOnK66PWYc1EZBEgSgA/exec", {
+          const resp = await fetch("https://script.google.com/macros/s/AKfycbwnIZMx_vwhd9qAQSCvCgswi415b3M56tNA8yCBN4rCVFzg-4QNSAImetbcdoRPAvgAQw/exec", {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(payload)
